@@ -1,0 +1,48 @@
+---
+title: "Figure 1B: Frequency distribution of missense variants at Pfam residues"
+output: html_notebook
+---
+
+This notebook creates a plot from pre-computed missense variant frequencies
+over residues in the Pfam-gnomAD dataset.
+
+```{r}
+suppressPackageStartupMessages(library(dplyr))
+library(ggplot2)
+library(readr)
+
+
+# Load pre-computed frequencies
+pfam_res_mis_freqs <-
+  read_csv(
+    "data/pfam-residue-missense-counts-summary.csv",
+    col_types = cols(missense_variants = col_double(),
+                     freq = col_double())
+  )
+pfam_res_mis_freqs
+
+# Plot the histogram
+(
+  pfam_res_mis_freqs
+  |> ggplot()
+  + aes(x = missense_variants, y = freq)
+  + geom_bar(stat = 'identity')
+  
+  # Annotations
+  + xlab('# Missense')
+  + ylab('# Residues')
+  + scale_y_continuous(labels = scales::comma)
+  
+  # Theme
+  + theme_minimal()
+  + theme(aspect.ratio = 1)
+  + theme(
+    axis.line = element_line(color = 'black'),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(size = 0.1),
+    panel.grid.major.x = element_blank(),
+  )
+)
+ggsave('plot1b.svg')
+```
+
