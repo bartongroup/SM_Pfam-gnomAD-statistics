@@ -1,0 +1,210 @@
+---
+title: 'Supplementary Table 4: Feature enrichment in UMDs vs. UMEs'
+output: html_notebook
+---
+
+```{r Setup, read and process data}
+library(broom)
+suppressPackageStartupMessages(library(dplyr))
+library(readr)
+library(tidyr)
+
+
+# Load and process the data
+pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv <-
+  read_csv("data/pfam-gnomAD-clinvar-pdb-colstats_c7c3e19.csv.gz",
+           comment = "#")
+
+avs <-
+  pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv  # avs: alignments variants structure
+
+# Drop unneccesary columns
+whitelist <- c(
+  "family",
+  "column",
+  "splice_region_variant&synonymous_variant",
+  "synonymous_variant",
+  "occupancy",
+  "shenkin",
+  "_missense_all",
+  "mes_or",
+  "mes_p",
+  "occupancy_minus_threshold",
+  "occupancy_gteq_threshold",
+  "shenkin_nrank",
+  "mes_or_nrank",
+  "mes_or_log",
+  "CV_Pathogenic",
+  "PDB_sequences_with_contacts",
+  "PDB_protein_ligand_interactions",
+  "PDB_total_ligand_interactions",
+  "PDB_protein_protein_interactions",
+  "PDB_total_protein_interactions",
+  "PDB_biolip",
+  "PDB_total_biolip",
+  "PDB_jury_column_rsa_unb"
+)
+blacklist <- !names(avs) %in% whitelist
+avs[, blacklist] <- NULL
+
+# Rename variable for convenience
+names(avs)[names(avs) == '_missense_all'] <- 'missense_all'
+
+# Categories columns with MES and conservation thresholds
+(
+  avs <- avs
+  
+  # Categorise MES and Shenkin
+  |> mutate(mes_class = factor(
+    ifelse(mes_p < 0.1, ifelse(mes_or < 1, 'md', 'me'), 'mn'), levels = c('md', 'mn', 'me')
+  ))
+  |> mutate(cons_class = factor(
+    ifelse(shenkin_nrank > 0.5, 'u', 'c'), levels = c('u', 'c')
+  ))
+  |> mutate(xclass = factor(
+    interaction(cons_class, mes_class, sep = ''),
+    levels = c('cmd', 'cmn', 'cme', 'umd', 'umn', 'ume')
+  ))
+  
+  
+  
+  # Minimal filters for this notebook
+  # Column filters
+  |> filter(occupancy > 0)  # must have human sequences
+  # # |> filter(PDB_sequences_with_contacts > 0)  # will also drop Pfams with no PDB data
+  #
+  # Filter Pfams that don't have at least one missense enriched and missense depleted position
+  # Leaving this out attenuates the results but doesn't change any overall conclusion
+  |> group_by(family) |> filter(any(mes_or < 1 & mes_p < 0.1)) |> ungroup()
+  |> group_by(family) |> filter(any(mes_or > 1 & mes_p < 0.1)) |> ungroup()
+  
+  # Minor data cleaning steps
+  |> mutate(PDB_jury_column_rsa_unb = as.factor(PDB_jury_column_rsa_unb))
+  |> replace_na(
+    list(
+      PDB_protein_ligand_interactions = 0,
+      PDB_biolip = 0,
+      PDB_sequences_with_contacts = 0
+    )
+  )
+)
+
+# Unload unprocessed dataset
+rm(pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv)
+
+# Print some basic statistics
+print(paste('N Pfam domains =', n_distinct(avs$family)))
+print(paste('N positions =', avs |> nrow()))
+print(paste('N positions with human =', avs |> filter(occupancy > 0) |> nrow()))
+```
+
+
+```{r Test enrichment of BioLiP interacting residues in UMDs vs. UMEs}
+(
+  avs
+  |> filter(xclass %in% c('umd', 'ume'))
+  |> group_by(xclass)
+  |> summarise(
+    n_biolip = sum(PDB_biolip),
+    seq_pdb_cov = sum(PDB_sequences_with_contacts),
+    n_positions = n(),
+    n_human_residues = sum(occupancy)  # for additional context
+  )
+  |> as.data.frame()
+  -> umd_ume_summary
+)
+
+rownames(umd_ume_summary) <- umd_ume_summary[['xclass']]
+test_df <- umd_ume_summary[c('umd', 'ume'), c('n_biolip', 'seq_pdb_cov')]
+test_df
+
+fisher.test(test_df)
+```
+
+
+```{r Same test as above but all within a single pipe}
+(
+  avs
+  |> filter(xclass %in% c('umd', 'ume'))
+  |> group_by(xclass)
+  |> summarise(
+    n_biolip = sum(PDB_biolip),
+    seq_pdb_cov = sum(PDB_sequences_with_contacts)
+  )
+  |> ungroup()
+  |> arrange(xclass)  # umd > ume
+  |> select(n_biolip, seq_pdb_cov)
+  |> summarise(broom::tidy(fisher.test(matrix(
+    c(n_biolip, seq_pdb_cov), ncol = 2
+  ))))
+)
+```
+
+
+
+```{r Define function to compare UMD vs. UME for any feature and test}
+test_umd_vs_ume <- function(.data, feature, background) {
+  (
+    .data
+    |> filter(xclass %in% c('umd', 'ume'))
+    |> group_by(xclass)
+    |> summarise(
+      n_feature = sum({
+        {
+          feature
+        }
+      }, na.rm = TRUE),
+      n_background = sum({
+        {
+          background
+        }
+      }, na.rm = TRUE)
+    )
+    |> ungroup()
+    |> arrange(xclass)  # umd > ume
+    |> select(n_feature, n_background)
+    |> summarise(broom::tidy(fisher.test(
+      matrix(c(n_feature, n_background - n_feature), ncol = 2)
+    )))
+  )
+}
+
+# BioLiP
+test_umd_vs_ume(avs, PDB_biolip, PDB_sequences_with_contacts)
+
+# All protein-ligand
+test_umd_vs_ume(avs,
+                PDB_protein_ligand_interactions,
+                PDB_sequences_with_contacts)
+
+# Protein-protein interfaces
+test_umd_vs_ume(avs,
+                PDB_protein_protein_interactions,
+                PDB_sequences_with_contacts)
+
+# ClinVar pathogenic enrichment relative to gnomAD missense
+test_umd_vs_ume(avs, CV_Pathogenic, missense_all)
+```
+
+
+```{r Apply UMD vs. UME tests within each RSA class}
+apply_test_over_rsa_classes <-
+  function(.data, feature, background) {
+    rsa_classes <- c('Core', 'Part. Exposed', 'Surface')
+    do.call(rbind,
+            lapply(list(1:3, 1, 2, 3), function(rsa_select) {
+              test_umd_vs_ume(.data |> filter(PDB_jury_column_rsa_unb %in% rsa_classes[rsa_select]),
+                              {{feature}},
+                              {{background}})
+            }))
+  }
+
+by_rsa_biolip <- apply_test_over_rsa_classes(avs, PDB_biolip, PDB_sequences_with_contacts)
+by_rsa_protein <- apply_test_over_rsa_classes(avs, PDB_protein_protein_interactions, PDB_sequences_with_contacts)
+by_rsa_pathog <- apply_test_over_rsa_classes(avs, CV_Pathogenic, missense_all)
+
+by_rsa_biolip
+by_rsa_protein
+by_rsa_pathog
+```
+
