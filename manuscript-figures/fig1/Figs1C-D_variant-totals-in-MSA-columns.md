@@ -1,19 +1,18 @@
----
-title: "Figures 1C-D: Frequency distribution of variants in MSAs"
-output: github_document
----
+Figures 1C-D: Frequency distribution of variants in MSAs
+================
 
-This notebook creates plots from pre-computed missense variant frequencies
-over MSA columns in the Pfam-gnomAD dataset.
+This notebook creates plots from pre-computed missense variant
+frequencies over MSA columns in the Pfam-gnomAD dataset.
 
-The first plot shows the frequency distributions of the number of missense
-variants in Pfam MSA columns in Pfams with different numbers of human sequences.
+The first plot shows the frequency distributions of the number of
+missense variants in Pfam MSA columns in Pfams with different numbers of
+human sequences.
 
-The second plot shows the relationship between the number of missense and
-synonymous variants in an MSA column and the Shenkin diversity in SH2 domains.
+The second plot shows the relationship between the number of missense
+and synonymous variants in an MSA column and the Shenkin diversity in
+SH2 domains.
 
-
-```{r Setup and data processing}
+``` r
 suppressPackageStartupMessages(library(tidyverse))
 
 
@@ -53,8 +52,7 @@ avs <- avs |> filter(occupancy > 0)  # must have human sequences
 rm(pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv)
 ```
 
-
-```{r Figure 1C: Column missense frequency histograms by N human sequences}
+``` r
 (avs
  |> filter(occupancy %in% c(1, 5, 9))  # N human sequences to be plotted, filters columns
  # |> sample_n(10000)  # for prototyping
@@ -62,7 +60,28 @@ rm(pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv)
  |> summarise(n_cols = n())
  -> avs_missense_freqs_by_nhuman
  )
+```
 
+    ## `summarise()` has grouped output by 'occupancy'. You can override using the
+    ## `.groups` argument.
+
+    ## # A tibble: 48 × 3
+    ## # Groups:   occupancy [3]
+    ##    occupancy missense_all n_cols
+    ##        <dbl>        <dbl>  <int>
+    ##  1         1            0 391034
+    ##  2         1            1 183476
+    ##  3         1            2  51035
+    ##  4         1            3   9143
+    ##  5         1            4   1163
+    ##  6         1            5     96
+    ##  7         1            6     14
+    ##  8         1            7      3
+    ##  9         1            8      1
+    ## 10         1            9      1
+    ## # … with 38 more rows
+
+``` r
 (avs_missense_freqs_by_nhuman
   # data
   |> filter(occupancy %in% c(1, 5, 9))
@@ -92,14 +111,17 @@ rm(pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv)
     strip.text.x = element_blank(),
     )
   )
+```
 
+![](Figs1C-D_variant-totals-in-MSA-columns_files/figure-gfm/Figure%201C:%20Column%20missense%20frequency%20histograms%20by%20N%20human%20sequences-1.png)<!-- -->
+
+``` r
 ggsave('plot1c.svg')
 ```
 
+    ## Saving 7 x 5 in image
 
-
-```{r Figure 1D: Column variant totals vs. Shenkin in SH2 domains}
-
+``` r
 # Graph to help pick occupancy threshold for the figure
 # This is required because Shenkin is strongly dependent on occupancy in the
 # range from 1 - ~100, which applies to extremely gappy regions found in Pfams.
@@ -115,7 +137,11 @@ ggsave('plot1c.svg')
  + theme(aspect.ratio = 1)
  + theme(axis.line = element_line(color='black'))
 )
+```
 
+![](Figs1C-D_variant-totals-in-MSA-columns_files/figure-gfm/Figure%201D:%20Column%20variant%20totals%20vs.%20Shenkin%20in%20SH2%20domains-1.png)<!-- -->
+
+``` r
 (avs
  |> filter(family == 'PF00017')
  |> filter(occupancy >= 90)
@@ -147,13 +173,35 @@ ggsave('plot1c.svg')
     strip.text.x = element_blank(),
     )
  )
+```
+
+![](Figs1C-D_variant-totals-in-MSA-columns_files/figure-gfm/Figure%201D:%20Column%20variant%20totals%20vs.%20Shenkin%20in%20SH2%20domains-2.png)<!-- -->
+
+``` r
 ggsave('plot1d.svg')
 ```
 
-```{r Help select threhold for MES colouring in Jalview to make Figure 1F}
+    ## Saving 7 x 5 in image
+
+``` r
 (avs
  |> filter(family == 'PF00017')
  |> group_by(occupancy >= 90, mes_or < 1, mes_p < 0.1)
  |> summarise(max(mes_or_log))
  )
 ```
+
+    ## `summarise()` has grouped output by 'occupancy >= 90', 'mes_or < 1'. You can
+    ## override using the `.groups` argument.
+
+    ## # A tibble: 7 × 4
+    ## # Groups:   occupancy >= 90, mes_or < 1 [4]
+    ##   `occupancy >= 90` `mes_or < 1` `mes_p < 0.1` `max(mes_or_log)`
+    ##   <lgl>             <lgl>        <lgl>                     <dbl>
+    ## 1 FALSE             FALSE        FALSE                    1.60  
+    ## 2 FALSE             FALSE        TRUE                     2.00  
+    ## 3 FALSE             TRUE         FALSE                   -0.0780
+    ## 4 TRUE              FALSE        FALSE                    0.270 
+    ## 5 TRUE              FALSE        TRUE                     0.467 
+    ## 6 TRUE              TRUE         FALSE                   -0.0136
+    ## 7 TRUE              TRUE         TRUE                    -0.435
