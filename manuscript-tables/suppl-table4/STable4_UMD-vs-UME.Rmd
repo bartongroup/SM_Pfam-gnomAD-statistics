@@ -1,6 +1,6 @@
 ---
 title: 'Supplementary Table 4: Feature enrichment in UMDs vs. UMEs'
-output: html_notebook
+output: github_document
 ---
 
 ```{r Setup, read and process data}

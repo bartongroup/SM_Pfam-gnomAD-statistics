@@ -1,6 +1,6 @@
 ---
 title: "Evaluation of EVcouplings data for NR-LBD of STF-1"
-output: html_notebook
+output: github_document
 ---
 
 ```{r}
