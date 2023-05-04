@@ -1,0 +1,365 @@
+---
+title: "Figure 4C: Enrichment of Pathogenic variants in Conservation Plane"
+output:
+  github_document:
+    toc: true
+    toc_depth: 2
+---
+
+This notebook presents code that generates Figure 4C and supporting statistics,
+which describe the enrichment of ClinVar Pathogenic variants within different
+regions of the conservation plane.
+
+The notebook works with our pre-calculated MSA column statistics for population
+and clinical variants, and structural features, for relevant Pfams. If you want
+to go straight to the plot code then follow the link in the Table of Contents above.
+
+# Notebook resources
+## Libraries
+
+```{r Libraries}
+suppressPackageStartupMessages(library(tidyverse))
+library(patchwork)
+```
+
+## Dataset
+
+```{r Load dataset}
+# Read and process dataset
+pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv <-
+  read_csv("./data/pfam-gnomAD-clinvar-pdb-colstats_c7c3e19.csv.gz",
+           comment = "#", show_col_types = FALSE)
+
+avs <-
+  pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv  # avs: alignments variants structure
+
+# Filter unnecessary variables
+whitelist <- c(
+  "family",
+  "column",
+  "occupancy",
+  "shenkin",
+  "_missense_all",
+  "mes_or",
+  "mes_p",
+  "occupancy_minus_threshold",
+  "occupancy_gteq_threshold",
+  "shenkin_nrank",
+  "mes_or_nrank",
+  "mes_or_log",
+  "CV_Benign",
+  "CV_Benign/Likely_benign",
+  "CV_Conflicting_interpretations_of_pathogenicity",
+  "CV_Likely_benign",
+  "CV_Likely_pathogenic",
+  "CV_Pathogenic",
+  "CV_Uncertain_significance",
+  "CV_Pathogenic/Likely_pathogenic",
+  "PDB_jury_column_rsa_unb"
+)
+blacklist <- !names(avs) %in% whitelist
+avs[, blacklist] <- NULL
+
+# FYI: There are several other ClinVar entries I could look at in future
+# "CV_not_provided",
+# "CV_drug_response",
+# "CV_association",
+# "CV_risk_factor",
+# "CV_other",
+# "CV_Affects",
+# "CV_protective",
+
+# Better variable name format
+names(avs)[names(avs) == '_missense_all'] <- 'missense_all'
+
+avs <- (
+  avs
+  
+  # Categorise MES and Shenkin
+  |> mutate(mes_class = factor(
+    ifelse(mes_p < 0.1, ifelse(mes_or < 1, 'md', 'me'), 'mn'), levels = c('md', 'mn', 'me')
+  ))
+  |> mutate(cons_class = factor(
+    ifelse(shenkin_nrank > 0.5, 'u', 'c'), levels = c('u', 'c')
+  ))
+  |> mutate(xclass = factor(
+    interaction(cons_class, mes_class, sep = ''),
+    levels = c('cmd', 'cmn', 'cme', 'umd', 'umn', 'ume')
+  ))
+  
+  # Other
+  |> replace_na(list(CV_Pathogenic = 0))
+)
+
+# Clean-up
+rm(pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv)
+
+
+COLOUR_SCHEME <- c(
+  'cmd' = '#CC79A7',
+  'ume' = '#56B4E9',
+  'umn' = '#999999',
+  'cmn' = '#999999',
+  'umd' = '#E69F00',
+  'cme' = '#009E73'
+)
+```
+
+# Calculate and plot odds ratios
+
+1. Filter Pfams without any Pathogenic variants
+2. Filter low-powered Pfams
+3. Calculate summary statistics for each X-Class
+4. Calculate odds ratios for each X-class
+5. Repeat steps 3-4 for individual RSA classes
+6. Compose plot
+
+First we apply the filters:
+
+```{r Filter dataset for these tests}
+# Summarise counts
+avs_test_set <- (
+  avs
+  
+  # Column filters
+  |> filter(occupancy > 0)
+  
+  # Pfam filters
+  |> group_by(family) |> filter(any(CV_Pathogenic > 0)) |> ungroup()
+  
+  # Heuristic to select well-powered Pfams
+  |> group_by(family) |> filter(any(mes_or < 1 & mes_p < 0.1)) |> ungroup()  # at least one depleted site
+  |> group_by(family) |> filter(any(mes_or > 1 & mes_p < 0.1)) |> ungroup()  # at least one enriched site
+)
+```
+
+Then summarise the data over the X-Classes:
+
+```{r Summary statistics for different X-Classes}
+summarize_data <- function(data, group_vars) {
+  data |>
+    group_by(across(all_of(group_vars))) |>
+    summarise(
+      n_pfams = n_distinct(family),
+      n_columns = n(),
+      n_residues = sum(occupancy),
+      n_missense = sum(missense_all),
+      across(c(CV_Pathogenic, CV_Benign), sum),
+      cons_class = first(cons_class),
+      mes_class = first(mes_class)
+    )
+}
+
+add_ratios <-
+  function(data, pathogenic_col, missense_col, residues_col) {
+    data %>%
+      mutate(
+        missense_per_res = !!sym(missense_col) / !!sym(residues_col),
+        patho_per_missense = !!sym(pathogenic_col) / !!sym(missense_col),
+        patho_per_column = !!sym(pathogenic_col) / !!sym(residues_col)
+      )
+  }
+
+add_test_backgrounds <- function(data, group_vars) {
+  data |>
+    ungroup() |>
+    group_by(across(all_of(group_vars))) |>
+    mutate(across(
+      c(n_missense, n_residues, CV_Pathogenic, CV_Benign),
+      sum,
+      .names = "test_background_{.col}"
+    ))
+}
+
+
+# Calculate group statistics for different X-Classes
+avs_xclass_summary <- avs_test_set |>
+  summarize_data(group_vars = "xclass") |>
+  add_ratios(
+    pathogenic_col = "CV_Pathogenic",
+    missense_col = "n_missense",
+    residues_col = "n_residues"
+  ) |>
+  add_test_backgrounds(group_vars = NULL)
+avs_xclass_summary
+```
+
+```{r Totals}
+# Totals
+avs_xclass_summary |> ungroup() |> select(where(is.numeric)) |> summarise_all(sum)
+```
+
+## Odds ratios for Pathogenic enrichment in X-Classes
+Now apply Fishers exact test for each X-Class (CMD, UMD, etc...).
+
+```{r Test enrichment of protein-ligand interactions in different X-Classes}
+perform_fisher_test <- function(df, group_vars) {
+  df %>%
+    group_by(!!!syms(group_vars)) %>%
+    summarise(
+      test = broom::tidy(
+        fisher.test(matrix(
+          c(
+            CV_Pathogenic,
+            n_missense,
+            test_background_CV_Pathogenic - CV_Pathogenic,
+            test_background_n_missense - n_missense
+          ),
+          nrow = 2
+        ), alternative = 'two.sided')
+      ),
+      cons_class = first(cons_class),
+      mes_class = first(mes_class)
+    ) %>%
+    unnest(test)
+}
+
+avs_xclass_fisher <- perform_fisher_test(avs_xclass_summary, "xclass")
+avs_xclass_fisher
+```
+
+Now do the same while stratifying for RSA class as well.
+
+```{r Summarise data}
+avs_xclass_summary_byRSA <- avs_test_set |>
+  filter(PDB_jury_column_rsa_unb %in% c('Core', 'Part. Exposed', 'Surface')) |>
+  summarize_data(group_vars = c("PDB_jury_column_rsa_unb", "xclass")) |>
+  add_ratios(
+    pathogenic_col = "CV_Pathogenic",
+    missense_col = "n_missense",
+    residues_col = "n_columns"
+  ) |>
+  add_test_backgrounds(group_vars = "PDB_jury_column_rsa_unb")
+avs_xclass_summary_byRSA
+```
+
+```{Totals by RSA}
+# Totals
+avs_xclass_summary_byRSA |> ungroup() |> select(where(is.numeric)) |> summarise_all(sum)
+```
+
+## Odds ratios for Pathogenic enrichment in X-Class * RSA
+
+```{r Test enrichment of protein-ligand interactions in X-Classes by RSA}
+avs_xclass_fisher_byRSA <- perform_fisher_test(avs_xclass_summary_byRSA, c("PDB_jury_column_rsa_unb", "xclass"))
+avs_xclass_fisher_byRSA
+```
+
+# Figure 4D: Odds ratio plot
+
+```{r Combined plot}
+plot_odds_ratio <- function(df, facet_var = NULL) {
+  dodge_width <- 0.6
+  
+  plot <- df |>
+    ggplot() +
+    aes(x = xclass, y = estimate, colour = xclass) +
+    geom_hline(yintercept = 1, lty = 2) +
+    geom_errorbar(
+      aes(ymin = sapply(conf.low, function(y) max(y, 0.2)),  # clip
+          ymax = conf.high),
+      width = 0.5,
+      position = position_dodge(dodge_width)
+    ) +
+    geom_point(position = position_dodge(dodge_width)) +
+    scale_y_log10() +
+    ylab('Odds Ratio') +
+    xlab('') +
+    theme_minimal() +
+    theme(legend.position = "none", aspect.ratio = 1) +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.5)) +
+    scale_color_manual(values = COLOUR_SCHEME)
+  
+  if (!is.null(facet_var)) {
+    plot <- plot + facet_grid(paste0(" ~ ", facet_var))
+  }
+  
+  return(plot)
+}
+
+
+feature_oddsratio_plot <- plot_odds_ratio(avs_xclass_fisher)
+feature_oddsratio_byRSA_plot <- plot_odds_ratio(avs_xclass_fisher_byRSA, "PDB_jury_column_rsa_unb")
+
+patchworked_plot <- (feature_oddsratio_plot + feature_oddsratio_byRSA_plot
+  + plot_layout(guides = 'collect', widths = c(1, 3))
+  )
+
+
+p_ranges_y <- 10^c(ggplot_build(patchworked_plot[[1]])$layout$panel_scales_y[[1]]$range$range,
+                   ggplot_build(patchworked_plot[[2]])$layout$panel_scales_y[[1]]$range$range)
+
+combined_plot <- (
+    patchworked_plot
+  & scale_y_log10(limits = c(0.2, 6),  # limit in conjunction with clip
+                  breaks = c(0.1, 0.2, 0.3, 0.4, 0.5, 1, 2, 3, 4, 5, 6),
+                  labels = c('', '', 0.3, '', 0.5, 1, 2, 3, 4, 5, ''),
+                  minor_breaks = c(seq(0.1, 1, 0.1), seq(1, 5, 1)),
+  )
+  & scale_x_discrete(limits = c('', 'cmd', 'cmn', 'cme', '', 'umd', 'umn', 'ume', ''))
+  & theme(
+    axis.line = element_line(color='black'),
+    panel.grid.minor = element_line(size = 0.1),
+    panel.grid.major = element_line(size = 0.1),
+    panel.grid.major.x = element_blank()
+    )
+)
+
+combined_plot
+ggsave('plot4c.svg', combined_plot)
+```
+
+# Supporting statistics
+
+We quoted the maximum discrimination observed with respect to X-Class and
+ClinVar Pathogenic variants. This is found by comparing Surface CMD to UME
+positions:
+
+```{r Surface CMD vs. UME}
+(
+  avs
+  |> filter(PDB_jury_column_rsa_unb == 'Surface')
+  |> filter(xclass %in% c('cmd', 'ume'))
+  |> group_by(xclass)
+  |> summarise(
+    n_patho = sum(CV_Pathogenic),
+    n_missense = sum(missense_all)
+  )
+  -> cmd_vs_ume
+)
+
+(
+  cmd_vs_ume
+  |> pivot_wider(names_from = xclass, values_from = starts_with("n_"))
+  |> summarise(
+      test =  broom::tidy(
+        fisher.test(matrix(c(n_patho_cmd, n_missense_cmd, n_patho_ume, n_missense_ume),
+                           nrow = 2), alternative = 'two.sided'))
+    )
+  |> unnest(test)
+)
+```
+
+It's sensible to check that we observe the widely reported enrichment of
+Pathogenic variants in buried positions:
+
+```{r Positive control: do we see Pathogenic variant senriched in Core?}
+avs |>
+  group_by(PDB_jury_column_rsa_unb) |>
+  summarise(n_missense = sum(missense_all), CV_Pathogenic = sum(CV_Pathogenic)) |>
+  mutate(across(c(n_missense, CV_Pathogenic), sum, .names = "test_background_{.col}")) |>
+  group_by(PDB_jury_column_rsa_unb, .drop = TRUE) |>
+  summarise(
+    # Biolip enrichment
+    test =  broom::tidy(
+      fisher.test(matrix(c(CV_Pathogenic, n_missense,
+                           test_background_CV_Pathogenic - CV_Pathogenic,
+                           test_background_n_missense - n_missense),
+                         nrow = 2), alternative = 'two.sided'))
+  ) |>
+  unnest(test)
+```
+
+# Future work
+
+-   ClinVar enrichments in different positions with various structural features
