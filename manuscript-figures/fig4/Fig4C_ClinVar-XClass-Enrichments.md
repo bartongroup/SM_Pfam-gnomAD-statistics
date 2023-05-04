@@ -14,8 +14,8 @@ Figure 4C: Enrichment of Pathogenic variants in Conservation Plane
   - <a href="#odds-ratios-for-pathogenic-enrichment-in-x-class--rsa"
     id="toc-odds-ratios-for-pathogenic-enrichment-in-x-class--rsa">Odds
     ratios for Pathogenic enrichment in X-Class * RSA</a>
-- <a href="#figure-4d-odds-ratio-plot"
-  id="toc-figure-4d-odds-ratio-plot">Figure 4D: Odds ratio plot</a>
+- <a href="#figure-4c-odds-ratio-plot"
+  id="toc-figure-4c-odds-ratio-plot">Figure 4C: Odds ratio plot</a>
 - <a href="#supporting-statistics"
   id="toc-supporting-statistics">Supporting statistics</a>
 - <a href="#future-work" id="toc-future-work">Future work</a>
@@ -321,10 +321,20 @@ avs_xclass_summary_byRSA
     ## #   abbreviated variable names ¹​PDB_jury_column_rsa_unb, ²​n_columns,
     ## #   ³​n_residues, ⁴​n_missense, ⁵​CV_Pathogenic, ⁶​CV_Benign, ⁷​cons_class
 
-``` totals
+``` r
 # Totals
 avs_xclass_summary_byRSA |> ungroup() |> select(where(is.numeric)) |> summarise_all(sum)
 ```
+
+    ## # A tibble: 1 × 13
+    ##   n_pfams n_columns n_residues n_misse…¹ CV_Pa…² CV_Be…³ misse…⁴ patho…⁵ patho…⁶
+    ##     <int>     <int>      <dbl>     <dbl>   <dbl>   <dbl>   <dbl>   <dbl>   <dbl>
+    ## 1    4437     76903    1834538    835304    5590     655    352.   0.184    3.39
+    ## # … with 4 more variables: test_background_n_missense <dbl>,
+    ## #   test_background_n_residues <dbl>, test_background_CV_Pathogenic <dbl>,
+    ## #   test_background_CV_Benign <dbl>, and abbreviated variable names
+    ## #   ¹​n_missense, ²​CV_Pathogenic, ³​CV_Benign, ⁴​missense_per_res,
+    ## #   ⁵​patho_per_missense, ⁶​patho_per_column
 
 ## Odds ratios for Pathogenic enrichment in X-Class \* RSA
 
@@ -365,7 +375,7 @@ avs_xclass_fisher_byRSA
     ## #   ¹​PDB_jury_column_rsa_unb, ²​estimate, ³​conf.low, ⁴​conf.high, ⁵​alternative,
     ## #   ⁶​cons_class
 
-# Figure 4D: Odds ratio plot
+# Figure 4C: Odds ratio plot
 
 ``` r
 plot_odds_ratio <- function(df, facet_var = NULL) {

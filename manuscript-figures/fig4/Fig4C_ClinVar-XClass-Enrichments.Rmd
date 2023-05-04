@@ -233,19 +233,19 @@ avs_xclass_summary_byRSA <- avs_test_set |>
 avs_xclass_summary_byRSA
 ```
 
-```{Totals by RSA}
+```{r Totals by RSA}
 # Totals
 avs_xclass_summary_byRSA |> ungroup() |> select(where(is.numeric)) |> summarise_all(sum)
 ```
 
 ## Odds ratios for Pathogenic enrichment in X-Class * RSA
 
-```{r Test enrichment of protein-ligand interactions in X-Classes by RSA}
+```{r Test enrichment of Pathogenic variants in X-Classes by RSA}
 avs_xclass_fisher_byRSA <- perform_fisher_test(avs_xclass_summary_byRSA, c("PDB_jury_column_rsa_unb", "xclass"))
 avs_xclass_fisher_byRSA
 ```
 
-# Figure 4D: Odds ratio plot
+# Figure 4C: Odds ratio plot
 
 ```{r Combined plot}
 plot_odds_ratio <- function(df, facet_var = NULL) {
