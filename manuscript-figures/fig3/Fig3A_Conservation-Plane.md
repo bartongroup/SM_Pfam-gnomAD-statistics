@@ -7,9 +7,9 @@ Figure 3A: The Conservation Plane
   - <a href="#libraries" id="toc-libraries">Libraries</a>
   - <a href="#dataset" id="toc-dataset">Dataset</a>
 - <a href="#plot-sample" id="toc-plot-sample">Plot sample</a>
-- <a href="#figure-3a-the-conservation-plane"
-  id="toc-figure-3a-the-conservation-plane">Figure 3A: The Conservation
-  Plane</a>
+- <a href="#figure-3a-the-conservation-plane-manuscript-figure"
+  id="toc-figure-3a-the-conservation-plane-manuscript-figure">Figure 3A:
+  The Conservation Plane (manuscript figure)</a>
 
 # Introduction
 
@@ -182,7 +182,7 @@ mes_vs_cons_data |>
     ## 3 Surface                  4771                  251
     ## 4 <NA>                     1333                   46
 
-# Figure 3A: The Conservation Plane
+# Figure 3A: The Conservation Plane (manuscript figure)
 
 ``` r
 mes_vs_cons_data |>

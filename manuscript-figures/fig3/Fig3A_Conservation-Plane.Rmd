@@ -139,7 +139,7 @@ mes_vs_cons_data |>
   summarise(n(), n_distinct(family))
 ```
 
-# Figure 3A: The Conservation Plane
+# Figure 3A: The Conservation Plane (manuscript figure)
 ```{r Plot of the conservation plane}
 mes_vs_cons_data |>
   arrange(mes_p) |>  # points with lower p will be plotted on top
