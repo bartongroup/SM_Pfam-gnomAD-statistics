@@ -173,7 +173,7 @@ avs_xclass_summary |> ungroup() |> select(where(is.numeric)) |> summarise_all(su
 chi <- chisq.test(avs_xclass_summary[, c("PDB_biolip", "PDB_sequences_with_contacts")])
 chi
 ```
-## Odds ratios for Pathogenic enrichment in X-Classes
+## Odds ratios for BioLiP enrichment in X-Classes
 Now apply Fishers exact test for each X-Class (CMD, UMD, etc...).
 
 ```{r Test enrichment of protein-ligand interactions in different X-Classes}
@@ -218,7 +218,7 @@ avs_xclass_summary_byRSA
 avs_xclass_summary_byRSA |> ungroup() |> select(where(is.numeric)) |> summarise_all(sum)
 ```
 
-## Odds ratios for Pathogenic enrichment in X-Class * RSA
+## Odds ratios for protein-ligand interaction enrichment in X-Class * RSA
 
 ```{r Test enrichment of protein-ligand interactions in X-Classes by RSA}
 avs_xclass_fisher_byRSA <- perform_fisher_test(avs_xclass_summary_byRSA, c("PDB_jury_column_rsa_unb", "xclass"))
