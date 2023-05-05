@@ -1,0 +1,188 @@
+---
+title: "Figure 3A: The Conservation Plane"
+output:
+  github_document:
+    toc: true
+    toc_depth: 2
+---
+
+# Introduction
+This R markdown document visualizes the relationship between evolutionary
+conservation and population constraint in Pfam domains. The dataset used for
+this analysis is obtained from our pre-calculated MSA column statistics for
+Pfam, included in this repository. The resulting plot corresponds to Figure 3A
+in the manuscript.
+
+# Notebook resources
+## Libraries
+
+```{r Libraries and globals}
+suppressPackageStartupMessages(library(tidyverse))
+
+
+COLOUR_SCHEME <- c(
+  'cmd' = '#CC79A7',
+  'ume' = '#56B4E9',
+  'umn' = '#999999',
+  'cmn' = '#999999',
+  'umd' = '#E69F00',
+  'cme' = '#009E73'
+)
+```
+
+## Dataset
+
+```{r Load dataset}
+# Read and process dataset
+pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv <-
+  read_csv(
+    "data/pfam-gnomAD-clinvar-pdb-colstats_c7c3e19.csv.gz",
+    comment = "#",
+    show_col_types = FALSE
+  )
+
+# Processing
+avs <-
+  pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv  # avs: alignments variants structure
+
+# Filter unnecessary variables
+whitelist <- c(
+  "family",
+  "column",
+  "splice_region_variant&synonymous_variant",
+  "synonymous_variant",
+  "occupancy",
+  "shenkin",
+  "_missense_all",
+  "mes_or",
+  "mes_p",
+  "occupancy_minus_threshold",
+  "occupancy_gteq_threshold",
+  "shenkin_nrank",
+  "mes_or_nrank",
+  "mes_or_log",
+  "PDB_jury_column_rsa_unb"
+)
+blacklist <- !names(avs) %in% whitelist
+avs[, blacklist] <- NULL
+
+# Better variable name format
+names(avs)[names(avs) == '_missense_all'] <- 'missense_all'
+
+# Calculate synonymous all
+avs[, 'synonymous_all'] <-
+  avs[, 'splice_region_variant&synonymous_variant'] +
+  avs[, 'synonymous_variant']
+
+# Clean-up
+rm(pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv)
+```
+
+```{r Categorise columns}
+# Apply thresholds to categorise MES and Shenkin and the combined class
+avs <- (
+  avs
+  |> mutate(mes_class = factor(
+    ifelse(mes_p < 0.1, ifelse(mes_or < 1, 'md', 'me'), 'mn'), levels = c('md', 'mn', 'me')
+  ))
+  |> mutate(cons_class = factor(
+    ifelse(shenkin_nrank > 0.5, 'u', 'c'), levels = c('u', 'c')
+  ))
+  |> mutate(xclass = factor(
+    interaction(cons_class, mes_class, sep = ''),
+    levels = c('cmd', 'cmn', 'cme', 'umd', 'umn', 'ume')
+  ))
+)
+```
+
+```{r Standard filters}
+  # Minimal filters for notebook
+avs <- (
+  avs
+  # Column filters
+  |> filter(occupancy > 0)  # must have human sequences
+)
+```
+
+# Plot sample
+```{r Sample the full dataset before plotting}
+# We will plot a sample of the data so setting a seed to ensure reproducibility
+set.seed(777)
+(mes_vs_cons_data <- 
+  avs
+  |> filter(occupancy_gteq_threshold)
+  |> filter(occupancy > 20)
+  |> sample_n(10000)  # good balance for processing, completeness and legibility
+  |> mutate(
+    mes_class = factor(
+      ifelse(mes_p < 0.1, ifelse(mes_or < 1, 'md', 'me'), 'mn'),
+      levels = c('md', 'mn', 'me')
+    ),
+    cons_class = factor(
+      ifelse(shenkin_nrank > 0.5, 'u', 'c'),
+      levels = c('u', 'c')
+    ),
+    xclass = factor(
+      interaction(cons_class, mes_class, sep = ''),
+      levels = c('cmd', 'cmn', 'cme', 'umd', 'umn', 'ume')
+    )
+  )
+)
+```
+
+```{r Summarise the sample}
+mes_vs_cons_data |>
+  summarise(n(), n_distinct(family))
+
+mes_vs_cons_data |>
+  group_by(PDB_jury_column_rsa_unb) |>
+  summarise(n(), n_distinct(family))
+```
+
+# Figure 3A: The Conservation Plane
+```{r Plot of the conservation plane}
+mes_vs_cons_data |>
+  arrange(mes_p) |>  # points with lower p will be plotted on top
+  ggplot() +
+  aes(x = shenkin_nrank, y = mes_or) +
+  geom_point(aes(colour = xclass, alpha = ifelse(mes_p < 0.1, 1-mes_p, 0.01))) +
+  scale_alpha_continuous(range = c(0.1, 0.7)) +
+  scale_color_manual(values = COLOUR_SCHEME) +
+  geom_hline(yintercept = 1, lty = 2) +
+  geom_vline(xintercept = 0.5, lty = 2) +
+  
+  # Annotation
+  # https://stackoverflow.com/questions/28709331/logarithmic-grid-for-plot-with-ggplot2
+  scale_y_log10(breaks = 10^(-10:10),
+                minor_breaks = rep(1:9, 21)*(10^rep(-10:10, each=9)),
+                labels = 10^(-10:10)) +
+  annotation_logticks(sides = 'l') +
+  xlab('Normalised Shenkin') +
+  ylab('MES') +
+  annotate("text", x = 0.4, y = 1.20, label = "CME") +
+  annotate("text", x = 0.4, y = 0.83, label = "CMD") +
+  annotate("text", x = 0.6, y = 1.20, label = "UME") +
+  annotate("text", x = 0.6, y = 0.83, label = "UMD") +
+
+  # Plot theme
+  theme_minimal() +
+  theme(legend.position = "none", aspect.ratio = 1) +
+  theme(
+    axis.line = element_line(color='black'),  # heavy line for axes
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_blank(),
+    # Hide facet labels
+    strip.background = element_blank(),
+    strip.text.x = element_blank(),
+    ) ->
+  mes_vs_cons_plot
+
+mes_vs_cons_plot
+```
+
+```{r Save figure, include=FALSE}
+# Save the plot
+ggsave('plot3a.svg', mes_vs_cons_plot)
+ggsave('plot3a.png', mes_vs_cons_plot, dpi = 300)
+```
+
