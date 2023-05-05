@@ -1,0 +1,302 @@
+---
+title: "Figure 4B: Enrichment of protein-protein interactions"
+output:
+  github_document:
+    toc: true
+    toc_depth: 2
+---
+
+# Notebook resources
+## Libraries
+
+```{r Libraries}
+suppressPackageStartupMessages(library(tidyverse))
+library(patchwork)
+```
+
+## Dataset
+
+```{r Load dataset}
+# Read and process dataset
+pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv <- read_csv("data/pfam-gnomAD-clinvar-pdb-colstats_c7c3e19.csv.gz",
+comment = "#")
+
+avs <- pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv  # avs: alignments variants structure
+
+# Filter unnecessary variables
+whitelist <- c(
+  "family",
+  "column",
+  "occupancy",
+  "shenkin",
+  "_missense_all",
+  "mes_or",
+  "mes_p",
+  "occupancy_minus_threshold",
+  "occupancy_gteq_threshold",
+  "shenkin_nrank",
+  "mes_or_nrank",
+  "mes_or_log",
+  "PDB_sequences_with_contacts",
+  "PDB_protein_protein_interactions",
+  "PDB_total_protein_interactions",
+  "PDB_non_self_ppis",
+  "PDB_total_non_self_ppis",
+  "PDB_surface_ppis",
+  "PDB_total_surface_ppis",
+  "PDB_surface_homo_ppis",
+  "PDB_total_surface_homo_ppis",
+  "PDB_homo_ppis",
+  "PDB_total_homo_ppis",
+  "PDB_intra_domain_x_interactions",
+  "PDB_total_intra_domain_x_interactions",
+  "PDB_intra_domain_domain_interactions",
+  "PDB_total_intra_domain_domain_interactions",
+  "PDB_jury_column_rsa_unb",
+  "PDB_jury_column_rsa_bound"
+)
+blacklist <- !names(avs) %in% whitelist
+avs[, blacklist] <- NULL
+
+# Better variable name format
+names(avs)[names(avs) == '_missense_all'] <- 'missense_all'
+
+avs <- (
+  avs
+  
+  # Categorise MES and Shenkin
+  |> mutate(mes_class = factor(
+    ifelse(mes_p < 0.1, ifelse(mes_or < 1, 'md', 'me'), 'mn'), levels = c('md', 'mn', 'me')
+  ))
+  |> mutate(cons_class = factor(
+    ifelse(shenkin_nrank > 0.5, 'u', 'c'), levels = c('u', 'c')
+  ))
+  |> mutate(xclass = factor(
+    interaction(cons_class, mes_class, sep = ''),
+    levels = c('cmd', 'cmn', 'cme', 'umd', 'umn', 'ume')
+  ))
+  
+  # Other
+  |> mutate(PDB_jury_column_rsa_unb = as.factor(PDB_jury_column_rsa_unb))  #include all RSA/MES intersections
+  |> replace_na(list(PDB_protein_protein_interactions = 0,
+                     PDB_surface_ppis = 0,
+                     PDB_sequences_with_contacts = 0))
+)
+
+
+# Clean-up
+rm(pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv)
+
+
+COLOUR_SCHEME <- c(
+  'cmd' = '#CC79A7',
+  'ume' = '#56B4E9',
+  'umn' = '#999999',
+  'cmn' = '#999999',
+  'umd' = '#E69F00',
+  'cme' = '#009E73'
+)
+```
+
+
+# Calculate and plot odds ratios
+
+1. Filter Pfams without any protein-protein interactions
+2. Filter low-powered Pfams
+3. Calculate summary statistics for each X-Class
+4. Calculate odds ratios for each X-class
+5. Repeat steps 3-4 for individual RSA classes
+6. Compose plot
+
+First we apply the filters:
+
+```{r Filter dataset for these tests}
+# Summarise counts
+avs_test_set <- (
+  avs
+  
+  # Column filters
+  |> filter(occupancy > 0)  # must have human sequences
+  |> filter(PDB_sequences_with_contacts > 0)  # drop columns with no PDB data
+  
+  # Pfam filters
+  |> group_by(family) |> filter(any(PDB_protein_protein_interactions > 0)) |> ungroup()
+  
+  # Heuristic to select well-powered Pfams
+  |> group_by(family) |> filter(any(mes_or < 1 & mes_p < 0.1)) |> ungroup()  # at least one depleted site
+  |> group_by(family) |> filter(any(mes_or > 1 & mes_p < 0.1)) |> ungroup()  # at least one enriched site
+)
+```
+
+Then summarise the data over the X-Classes:
+
+```{r Summary statistics for different X-Classes}
+summarize_data <- function(data, group_vars) {
+  data |>
+    group_by(across(all_of(group_vars))) |>
+    summarise(
+      n_pfams = n_distinct(family),
+      n_columns = n(),
+      n_residues = sum(occupancy),
+      n_missense = sum(missense_all),
+      across(c(PDB_protein_protein_interactions, PDB_sequences_with_contacts), sum),
+      cons_class = first(cons_class),
+      mes_class = first(mes_class)
+    )
+}
+
+add_ratios <-
+  function(data) {
+    data %>%
+      mutate(
+        missense_per_res = n_missense / n_residues,
+        ppi_per_pdb = PDB_protein_protein_interactions / PDB_sequences_with_contacts,
+        PDB_per_column = PDB_sequences_with_contacts / n_columns
+      )
+  }
+
+add_test_backgrounds <- function(data, group_vars) {
+  data |>
+    ungroup() |>
+    group_by(across(all_of(group_vars))) |>
+    mutate(across(
+      c(n_missense, n_residues, PDB_protein_protein_interactions, PDB_sequences_with_contacts),
+      sum,
+      .names = "test_background_{.col}"
+    ))
+}
+
+
+# Calculate group statistics for different X-Classes
+avs_xclass_summary <- avs_test_set |>
+  summarize_data(group_vars = "xclass") |>
+  add_ratios() |>
+  add_test_backgrounds(group_vars = NULL)
+avs_xclass_summary
+```
+
+```{r Totals}
+# Totals
+avs_xclass_summary |> ungroup() |> select(where(is.numeric)) |> summarise_all(sum)
+```
+
+```{r Are protein-protein interactions associated with conservation plane class?}
+# Chi-square test
+chi <- chisq.test(avs_xclass_summary[, c("PDB_protein_protein_interactions", "PDB_sequences_with_contacts")])
+chi
+```
+## Odds ratios for protein-protein interaction enrichment in X-Classes
+Now apply Fishers exact test for each X-Class (CMD, UMD, etc...).
+
+```{r Test enrichment of protein-protein interactions in different X-Classes}
+perform_fisher_test <- function(df, group_vars) {
+  df %>%
+    group_by(!!!syms(group_vars)) %>%
+    summarise(
+      test = broom::tidy(
+        fisher.test(matrix(
+          c(
+            PDB_protein_protein_interactions,
+            PDB_sequences_with_contacts,
+            test_background_PDB_protein_protein_interactions - PDB_protein_protein_interactions,
+            test_background_PDB_sequences_with_contacts - PDB_sequences_with_contacts
+          ),
+          nrow = 2
+        ), alternative = 'two.sided')
+      ),
+      cons_class = first(cons_class),
+      mes_class = first(mes_class)
+    ) %>%
+    unnest(test)
+}
+
+avs_xclass_fisher <- perform_fisher_test(avs_xclass_summary, "xclass")
+avs_xclass_fisher
+```
+
+
+Now do the same while stratifying for RSA class as well.
+
+```{r Summarise data}
+avs_xclass_summary_byRSA <- avs_test_set |>
+  filter(PDB_jury_column_rsa_unb %in% c('Core', 'Part. Exposed', 'Surface')) |>
+  summarize_data(group_vars = c("PDB_jury_column_rsa_unb", "xclass")) |>
+  add_ratios() |>
+  add_test_backgrounds(group_vars = "PDB_jury_column_rsa_unb")
+avs_xclass_summary_byRSA
+```
+
+```{r Totals by RSA}
+# Totals
+avs_xclass_summary_byRSA |> ungroup() |> select(where(is.numeric)) |> summarise_all(sum)
+```
+
+## Odds ratios for protein-protein interaction enrichment in X-Class * RSA
+
+```{r Test enrichment of protein-ligand interactions in X-Classes by RSA}
+avs_xclass_fisher_byRSA <- perform_fisher_test(avs_xclass_summary_byRSA, c("PDB_jury_column_rsa_unb", "xclass"))
+avs_xclass_fisher_byRSA
+```
+  
+  
+# Figure 4B: Odds ratio plot
+
+```{r Combined plot}
+plot_odds_ratio <- function(df, facet_var = NULL) {
+  dodge_width <- 0.6
+  
+  plot <- df |>
+    ggplot() +
+    aes(x = xclass, y = estimate, colour = xclass) +
+    geom_hline(yintercept = 1, lty = 2) +
+    geom_errorbar(
+      aes(ymin = conf.low, ymax = conf.high),
+      width = 0.5,
+      position = position_dodge(dodge_width)
+    ) +
+    geom_point(position = position_dodge(dodge_width)) +
+    scale_y_log10() +
+    ylab('Odds Ratio') +
+    xlab('') +
+    theme_minimal() +
+    theme(legend.position = "none", aspect.ratio = 1) +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.5)) +
+    scale_color_manual(values = COLOUR_SCHEME)
+  
+  if (!is.null(facet_var)) {
+    plot <- plot + facet_grid(paste0(" ~ ", facet_var))
+  }
+  
+  return(plot)
+}
+
+
+feature_oddsratio_plot <- plot_odds_ratio(avs_xclass_fisher)
+feature_oddsratio_byRSA_plot <- plot_odds_ratio(avs_xclass_fisher_byRSA, "PDB_jury_column_rsa_unb")
+
+patchworked_plot <- (feature_oddsratio_plot + feature_oddsratio_byRSA_plot
+  + plot_layout(guides = 'collect', widths = c(1, 3))
+  )
+
+
+p_ranges_y <- 10^c(ggplot_build(patchworked_plot[[1]])$layout$panel_scales_y[[1]]$range$range,
+                   ggplot_build(patchworked_plot[[2]])$layout$panel_scales_y[[1]]$range$range)
+
+combined_plot <- (
+    patchworked_plot
+  & scale_y_log10(limits = c(1/1.6, 1.6),
+                  breaks = c(0.7, 1, 1.5),
+                  minor_breaks = c(0.6, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.6)
+  )
+  & scale_x_discrete(limits = c('', 'cmd', 'cmn', 'cme', '', 'umd', 'umn', 'ume', ''))
+  & theme(
+    axis.line = element_line(color='black'),
+    panel.grid.minor = element_line(size = 0.1),
+    panel.grid.major = element_line(size = 0.1),
+    panel.grid.major.x = element_blank()
+    )
+)
+
+combined_plot
+ggsave('plot4b.svg', combined_plot)
+```
