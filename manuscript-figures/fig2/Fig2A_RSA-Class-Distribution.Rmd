@@ -1,0 +1,262 @@
+---
+title: "Figure 2A: RSA class stratified MES and Shenkin residue ECDFs"
+output:
+  github_document:
+    toc: true
+    toc_depth: 2
+---
+
+# Introduction
+This R markdown document visualizes relationships between solvent accessibility
+with both evolutionary conservation and population constraint in Pfam domains.
+
+The dataset used for this analysis is obtained from our pre-calculated MSA
+column statistics for Pfam, included in this repository. The resulting plots
+corresponds to Figure 2A in the manuscript.
+
+# Notebook resources
+## Libraries
+
+```{r Dependencies}
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+## Dataset
+
+```{r Load dataset}
+
+# Load pfam-gnomAD dataset}
+pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv <-
+  read_csv("data/pfam-gnomAD-clinvar-pdb-colstats_c7c3e19.csv.gz", comment = "#")
+
+# Processing
+avs <- pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv  # avs: alignments variants structure
+
+# Filter columns
+whitelist <- c(
+  "family",
+  "column",
+  "occupancy",
+  "shenkin",
+  "_missense_all",
+  "mes_or",
+  "mes_p",
+  "occupancy_minus_threshold",
+  "occupancy_gteq_threshold",
+  "shenkin_nrank",
+  "mes_or_nrank",
+  "mes_or_log",
+  "PDB_sequences_with_contacts",
+  "PDB_jury_column_rsa_unb",
+  "PDB_jury_column_rsa_bound"
+)
+
+blacklist <- !names(avs) %in% whitelist
+avs[, blacklist] <- NULL
+
+# Simplify column names
+names(avs)[names(avs) == '_missense_all'] <- 'missense_all'
+```
+
+```{r Categorise columns}
+# Apply thresholds to categorise MES and Shenkin and the combined class
+avs <- (
+  avs
+  |> mutate(mes_class = factor(
+    ifelse(mes_p < 0.1, ifelse(mes_or < 1, 'md', 'me'), 'mn'), levels = c('md', 'mn', 'me')
+  ))
+  |> mutate(cons_class = factor(
+    ifelse(shenkin_nrank > 0.5, 'u', 'c'), levels = c('u', 'c')
+  ))
+  |> mutate(xclass = factor(
+    interaction(cons_class, mes_class, sep = ''),
+    levels = c('cmd', 'cmn', 'cme', 'umd', 'umn', 'ume')
+  ))
+)
+```
+ 
+``` {r Minimal filters and minor data cleaning}
+(avs <- avs
+  # Column filters
+  |> filter(occupancy > 0)  # must have human sequences
+  # |> filter(PDB_sequences_with_contacts > 0)  # drop Pfams with no PDB data?
+
+  # Powered Pfams
+  |> group_by(family) |> filter(any(mes_or < 1 & mes_p < 0.1)) |> ungroup()
+  |> group_by(family) |> filter(any(mes_or > 1 & mes_p < 0.1)) |> ungroup()
+  
+  # Other
+  |> mutate(PDB_jury_column_rsa_unb = as.factor(PDB_jury_column_rsa_unb))  # count all RSA*MES intersections
+  |> replace_na(list(PDB_protein_ligand_interactions = 0, PDB_biolip = 0,
+                     PDB_sequences_with_contacts = 0))
+)
+
+rm(pfam_gnomAD_clinvar_pdb_colstats_c7c3e19_csv)
+```
+
+
+```{r Exposure class group sizes}
+ RSA_LEVELS <- c('Core', 'Part. Exposed', 'Surface')
+
+# N residues per exposure with high/low conservation
+(avs
+ |> filter(PDB_jury_column_rsa_unb %in% c('Core', 'Part. Exposed', 'Surface'))
+ |> group_by(shenkin_nrank < 0.5, PDB_jury_column_rsa_unb)
+ |> summarise(n())
+ )
+
+# N residues per exposure with high/low MES
+(avs
+ |> filter(PDB_jury_column_rsa_unb %in% c('Core', 'Part. Exposed', 'Surface'))
+ |> group_by(mes_or < 1, PDB_jury_column_rsa_unb)
+ |> summarise(n())
+ )
+```
+
+
+# Figure 2A: Residue Shenking/MES ECDFs for each exposure class (manuscript figure)
+
+```{r Figure 2A (right panel): ECDF of residue Shenkin for different exposure classes}
+COLOUR_SCHEME <- c(
+  'partex_cum_frac' = '#56B4E9',
+  'core_cum_frac' = '#E69F00',
+  'surface_cum_frac' = '#009E73'
+)
+
+(avs
+  |> filter(PDB_jury_column_rsa_unb %in% RSA_LEVELS)
+  |> filter(occupancy_gteq_threshold)
+  |> filter(occupancy > 0)
+  |> filter(occupancy >= 20)
+  # |> filter(occupancy < 50). # variation with bounded occupancy window
+  |> arrange(shenkin_nrank)
+  |> select(family, column, shenkin_nrank, PDB_jury_column_rsa_unb)
+  |> pivot_wider(names_from = PDB_jury_column_rsa_unb,
+                 values_from = PDB_jury_column_rsa_unb,
+                 values_fn = function(x) return(1),
+                 values_fill = 0)
+  |> mutate(core_cum_frac = cumsum(Core) / sum(Core),
+            partex_cum_frac = cumsum(`Part. Exposed`) / sum(`Part. Exposed`),
+            surface_cum_frac = cumsum(Surface) / sum(Surface))
+  |> pivot_longer(core_cum_frac:surface_cum_frac)
+  |> ggplot()
+  + aes(x = shenkin_nrank, y = value*100, colour = name)
+  + geom_abline(slope = 100, intercept = 0, lty = 2)
+  + geom_line()
+  
+  # annotation
+  + xlab('Normalised Shenkin')
+  + ylab('Proportion of positions (%)')
+
+  # plot theme
+  + scale_colour_manual(values = COLOUR_SCHEME)
+  + theme_minimal()
+  + theme(aspect.ratio = 1)
+  + theme(
+    axis.line = element_line(color='black'),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(size = 0.1),
+    legend.position = "none"
+  )
+)
+
+ggsave('plot2a_right.svg')
+# ggsave('plot2a_right_supp-occ200.svg')
+```
+
+
+```{r Figure 2A (left panel): ECDF of residue MES for different exposure classes}
+
+(avs
+  |> filter(PDB_jury_column_rsa_unb %in% RSA_LEVELS)
+  |> filter(occupancy_gteq_threshold)
+  |> filter(occupancy > 0)
+  |> filter(occupancy >= 20)
+  |> arrange(mes_or_nrank)
+  |> select(family, column, mes_or_nrank, PDB_jury_column_rsa_unb)
+  |> pivot_wider(names_from = PDB_jury_column_rsa_unb,
+                 values_from = PDB_jury_column_rsa_unb,
+                 values_fn = function(x) return(1),
+                 values_fill = 0)
+  |> mutate(core_cum_frac = cumsum(Core) / sum(Core),
+            partex_cum_frac = cumsum(`Part. Exposed`) / sum(`Part. Exposed`),
+            surface_cum_frac = cumsum(Surface) / sum(Surface))
+  |> pivot_longer(core_cum_frac:surface_cum_frac)
+  |> ggplot()
+  + aes(x = mes_or_nrank, y = value*100, colour = name)
+  + geom_abline(slope = 100, intercept = 0, lty = 2)
+  + geom_line()
+ 
+   # annotation
+  + xlab('Normalised MES')
+  + ylab('Proportion of positions (%)')
+
+  # plot theme
+  + scale_colour_manual(values = COLOUR_SCHEME)
+  + theme_minimal()
+  + theme(aspect.ratio = 1)
+  + theme(
+    axis.line = element_line(color='black'),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(size = 0.1),
+    legend.position = "none"
+  )
+)
+
+ggsave('plot2a_left.svg')
+# ggsave('plot2a_left_supp-occ200.svg')
+```
+
+# Calculating some quoted figures in the manuscript
+
+```{r Quoted figures - MES}
+(
+avs
+  |> filter(PDB_jury_column_rsa_unb %in% RSA_LEVELS)
+  |> filter(occupancy_gteq_threshold)
+  |> filter(occupancy > 0)
+  |> filter(occupancy > 20)
+  |> arrange(mes_or_nrank)
+  |> select(family, column, mes_or_nrank, PDB_jury_column_rsa_unb)
+  |> pivot_wider(names_from = PDB_jury_column_rsa_unb,
+                 values_from = PDB_jury_column_rsa_unb,
+                 values_fn = function(x) return(1),
+                 values_fill = 0)
+  |> mutate(core_cum_frac = cumsum(Core) / sum(Core),
+            partex_cum_frac = cumsum(`Part. Exposed`) / sum(`Part. Exposed`),
+            surface_cum_frac = cumsum(Surface) / sum(Surface))
+  |> pivot_longer(core_cum_frac:surface_cum_frac)
+  |> filter(mes_or_nrank >= 0.5)
+  |> group_by(name)
+  |> summarise_all(min)
+)
+```
+
+```{r Quoted figures - Shenkin}
+(avs
+  |> filter(PDB_jury_column_rsa_unb %in% RSA_LEVELS)
+  |> filter(occupancy_gteq_threshold)
+  |> filter(occupancy > 0)
+  |> filter(occupancy >= 20)
+  # |> filter(occupancy < 50)
+  |> arrange(shenkin_nrank)
+  |> select(family, column, shenkin_nrank, PDB_jury_column_rsa_unb)
+  |> pivot_wider(names_from = PDB_jury_column_rsa_unb,
+                 values_from = PDB_jury_column_rsa_unb,
+                 values_fn = function(x) return(1),
+                 values_fill = 0)
+  |> mutate(core_cum_frac = cumsum(Core) / sum(Core),
+            partex_cum_frac = cumsum(`Part. Exposed`) / sum(`Part. Exposed`),
+            surface_cum_frac = cumsum(Surface) / sum(Surface))
+  |> pivot_longer(core_cum_frac:surface_cum_frac)
+  |> filter(shenkin_nrank >= 0.5)
+  |> group_by(name)
+  |> summarise_all(min)
+)
+```
+
+
+```{r Session Info.}
+sessionInfo()
+```
+
