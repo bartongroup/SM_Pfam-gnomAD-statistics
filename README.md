@@ -1,5 +1,14 @@
-# SM_Pfam-gnomAD-statistics
+# A unified approach to evolutionary conservation and population constraint in proteins
 Repository containing notebooks to compute statistics in the paper "A unified approach to evolutionary conservation and population constraint in proteins".
+
+## Dataset
+The analysis is based on aggregated statistics we computed from data accessed from the following databases:
+- [Pfam-A](https://pfam.xfam.org/) database of protein families (version 31.0)
+- [gnomAD](https://gnomad.broadinstitute.org/) database of human genetic variation (version 2.1.1).
+- [ClinVar](https://www.ncbi.nlm.nih.gov/clinvar/) database of human genetic variants and their clinical significance.
+- [PDBe](https://www.ebi.ac.uk/pdbe/) database of protein structures.
+
+These were processed into a single dataset of aggregated statistics for each Pfam domain, which is provided in `data/pfam-gnomAD-clinvar-pdb-colstats_c7c3e19.csv.gz`.
 
 ## Manuscript figures
 
