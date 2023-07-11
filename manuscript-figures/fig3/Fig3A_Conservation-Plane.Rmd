@@ -96,7 +96,7 @@ avs <- (
 ```
 
 ```{r Standard filters}
-  # Minimal filters for notebook
+# Minimal filters for notebook
 avs <- (
   avs
   # Column filters
