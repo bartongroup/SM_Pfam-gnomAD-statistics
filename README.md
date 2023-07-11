@@ -1,7 +1,7 @@
 # A unified approach to evolutionary conservation and population constraint in proteins
 Repository containing notebooks to compute statistics in the paper "A unified approach to evolutionary conservation and population constraint in proteins".
 
-This repository and its contents were created by Stuart A. MacGowan (@stuartmac) at the University of Dundee and is provided under the MIT license. See [LICENSE](LICENSE) for details.
+This repository and its contents were created by Stuart A. MacGowan [@stuartmac](https://www.github.com/stuartmac) at the University of Dundee and is provided under the MIT license. See [LICENSE](LICENSE) for details.
 
 ## Dataset
 The analysis is based on aggregated statistics we computed from data accessed from the following databases:
