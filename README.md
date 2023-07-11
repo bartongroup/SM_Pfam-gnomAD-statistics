@@ -21,7 +21,7 @@ The figures are shown below with links to the notebooks for each panel.
 **Figure 1:** Population diversity in Pfam domains is often positively correlated with evolutionary diversity.
 
 - **A.** An excerpt of the Phospholipase A2 1 domain (PF00068) highlighting sites with missense variants from gnomAD (red). The histogram shows the number of missense variants at each position across all 10 human sequences in the Pfam domain.
-- **B.** Frequency distribution of gnomAD missense variants across all amino acid residues in Pfam domains.
+- **B.** Frequency distribution of gnomAD missense variants across all amino acid residues in Pfam domains ([link to notebook](manuscript-figures/fig1/Fig1B_pfam-residue-missense-hist.md)).
 - **C.** Frequency distributions of gnomAD missense variants over alignment columns of Pfam domains containing 1, 5, or 9 (left to right) human sequences ([link to notebook](manuscript-figures/fig1/Figs1C-D_variant-totals-in-MSA-columns.md)).
 - **D.** The total number of gnomAD missense (left) or synonymous (right) variants vs. the Shenkin diversity at each position across SH2 domains (PF00017) and linear regressions (left panel: m = 0.23, c = 22; right panel: m = 0.00, c = 20) ([link to notebook](manuscript-figures/fig1/Figs1C-D_variant-totals-in-MSA-columns.md)).
 - **E.** The distribution of regression coefficients for gnomAD missense (upper panel) or synonymous (lower panel) variant totals against Shenkin divergence across 5,975 Pfam domains. Regression coefficients with p < 0.05 are colored blue.
