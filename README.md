@@ -1,5 +1,10 @@
 # A unified approach to evolutionary conservation and population constraint in proteins
+[![DOI](https://zenodo.org/badge/611501986.svg)](https://zenodo.org/doi/10.5281/zenodo.10731678)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/bartongroup/covid19-ace2-variants/blob/master/LICENSE)
+
 Repository containing notebooks to compute statistics in the paper "A unified approach to evolutionary conservation and population constraint in proteins".
+
+**Author:** Stuart MacGowan ([smacgowan@dundee.ac.uk](mailto:smacgowan@dundee.ac.uk))
 
 ## Dataset
 The analysis is based on aggregated statistics we computed from data accessed from the following databases:
